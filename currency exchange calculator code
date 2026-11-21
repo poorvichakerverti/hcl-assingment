@@ -1,0 +1,71 @@
+import urllib.request
+import urllib.error
+import json
+
+# Fallback rates relative to 1 USD (used if offline or API is unreachable)
+FALLBACK_RATES_FROM_USD = {
+    "USD": 1.0,
+    "EUR": 0.92,
+    "GBP": 0.79,
+    "INR": 84.50,
+    "JPY": 154.00,
+    "AUD": 1.53,
+    "CAD": 1.39,
+}
+
+
+def get_live_rate(base: str, target: str) -> tuple[float, str]:
+    """Fetch the live exchange rate from base to target currency."""
+    base = base.upper().strip()
+    target = target.upper().strip()
+
+    if base == target:
+        return 1.0, "same currency"
+
+    url = f"https://api.frankfurter.app/latest?from={base}&to={target}"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            rate = data.get("rates", {}).get(target)
+            if rate is not None:
+                return float(rate), f"live ({data.get('date', 'latest')})"
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+        pass
+
+    # Fallback conversion via USD
+    if base in FALLBACK_RATES_FROM_USD and target in FALLBACK_RATES_FROM_USD:
+        usd_amount = 1.0 / FALLBACK_RATES_FROM_USD[base]
+        rate = usd_amount * FALLBACK_RATES_FROM_USD[target]
+        return rate, "fallback offline rates"
+
+    raise ValueError(f"Unsupported currency pair: {base} -> {target}")
+
+
+def convert_currency(amount: float, base: str, target: str) -> None:
+    """Convert an amount from base currency to target currency and print result."""
+    if amount < 0:
+        raise ValueError("Amount cannot be negative.")
+
+    rate, source = get_live_rate(base, target)
+    converted = amount * rate
+    print(f"{amount:,.2f} {base.upper()} = {converted:,.2f} {target.upper()}")
+    print(f"Exchange rate: 1 {base.upper()} = {rate:.4f} {target.upper()} [{source}]")
+
+
+def main() -> None:
+    print("=== Currency Exchange Calculator ===")
+    print("Examples: USD, EUR, GBP, INR, JPY, AUD, CAD\n")
+
+    try:
+        amount_str = input("Enter amount: ").strip()
+        amount = float(amount_str)
+        base_currency = input("From currency (e.g., USD): ").strip()
+        target_currency = input("To currency (e.g., INR): ").strip()
+
+        convert_currency(amount, base_currency, target_currency)
+    except ValueError as e:
+        print(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    main()
